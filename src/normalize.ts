@@ -1,7 +1,11 @@
-import { Format, SomeObject, Options } from "./confyglot";
+import { Format, SomeObject } from "./confyglot";
+import { Options } from "./Options";
 import { strict as assert } from "assert";
 
-type Transformer = (value: unknown) => unknown;
+type Transformer = (
+  value: unknown,
+  propertyNameBreadcrumbs: string[]
+) => unknown;
 
 const convertNumberStrings: Transformer = (v) => {
   if (typeof v !== "string") {
@@ -23,6 +27,68 @@ const convertNumberStrings: Transformer = (v) => {
 
 const convertNullStrings: Transformer = (v) => (v === "null" ? null : v);
 
+type TomlishType =
+  | "string"
+  | "array"
+  | "object"
+  | "float"
+  | "integer"
+  | "boolean"
+  | "null"
+  | "other";
+
+// TOML has "strong but shallow" typing with the following types: String,
+// Integer, Float, Boolean, Datetime, Array, Inline Table. (See
+// https://github.com/toml-lang/toml/issues/553#issuecomment-410117682)
+// "Tomlish" types are those types representable by confyglot.
+const getTomlishType = (v: unknown): TomlishType => {
+  if (Array.isArray(v)) {
+    return "array";
+  }
+  if (v === null) {
+    return "null";
+  }
+  const type = typeof v;
+  switch (type) {
+    case "number":
+      return Number.isInteger(v) ? "integer" : "float";
+    case "bigint":
+      return "integer";
+    case "function":
+    case "symbol":
+    case "undefined":
+      return "other";
+  }
+  return type;
+};
+
+const forbidMixedArrays: Transformer = (
+  maybeArray,
+  propertyNameBreadcrumbs
+) => {
+  if (!Array.isArray(maybeArray)) {
+    return maybeArray;
+  }
+  const array = maybeArray;
+  let firstType: TomlishType | undefined;
+  array.forEach((v) => {
+    const type = getTomlishType(v);
+    if (firstType === undefined) {
+      firstType = type;
+    }
+    if (type !== firstType) {
+      // Unfortunately, we don't know the location in the original configuration
+      // file, but we can give a good hint using the property name breadcrumbs.
+      throw new Error(
+        `with forbidMixedArrays=true, arrays must be of a single type, not a mix of ${type} and ${firstType}: value of '${propertyNameBreadcrumbs.join(
+          "."
+        )}' is approximately ${JSON.stringify(array)}`
+      );
+    }
+  });
+  return array;
+};
+
 const getTransformersForFormat = (
   format: Format,
   options: Options
@@ -38,16 +104,26 @@ const getTransformersForFormat = (
       }
       break;
   }
+  if (options.forbidMixedArrays) {
+    transformers.push(forbidMixedArrays);
+  }
   return transformers;
 };
 
-const transform = (value: unknown, transformers: Transformer[]): unknown => {
+// Run through tree and apply transformers.
+const transform = (
+  value: unknown,
+  transformers: Transformer[],
+  breadcrumbs: string[]
+): unknown => {
   assert(transform.length > 0, "pointless call to transform()");
   const applyTransformers = (v: unknown) =>
-    transformers.reduce((v, transform) => transform(v), v);
+    transformers.reduce((v, transform) => transform(v, breadcrumbs), v);
 
   if (Array.isArray(value)) {
-    value = value.map((v) => transform(v, transformers));
+    value = value.map((v, i) =>
+      transform(v, transformers, [...breadcrumbs, i.toString()])
+    );
     // Give transformers an opportunity to work on the array itself
     return applyTransformers(value);
   }
@@ -55,10 +131,11 @@ const transform = (value: unknown, transformers: Transformer[]): unknown => {
     return applyTransformers(value);
   }
   return Object.fromEntries(
-    Object.entries(value as SomeObject).map(([k, v]) => [
-      k,
-      applyTransformers(transform(v, transformers)),
-    ])
+    Object.entries(value as SomeObject).map(([key, value]) => {
+      const newBreadcrumbs = [...breadcrumbs, key];
+      const transformedValue = transform(value, transformers, newBreadcrumbs);
+      return [key, transformedValue];
+    })
   );
 };
 
@@ -80,7 +157,7 @@ export const normalize = (
 
     const transformers = getTransformersForFormat(format, options);
     if (transformers.length > 0) {
-      parsedObject = transform(parsedObject, transformers) as SomeObject;
+      parsedObject = transform(parsedObject, transformers, []) as SomeObject;
     }
     return parsedObject;
   } catch (error) {

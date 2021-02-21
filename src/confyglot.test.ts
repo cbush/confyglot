@@ -1,6 +1,6 @@
 import { createFsFromVolume, Volume } from "memfs";
 import confyglot from "./";
-import { SomePromiseBasedFs } from "./confyglot";
+import { SomePromiseBasedFs } from "./";
 import * as Path from "path";
 import { JSONSchemaType } from "ajv";
 
@@ -215,6 +215,7 @@ foo=true
     const result = await confyglot.load("/path/to/project", {
       fs: fs as SomePromiseBasedFs,
       root: "/path/to/project",
+      forbidMixedArrays: false,
     });
     expect(result).toStrictEqual(expectedResult);
   });

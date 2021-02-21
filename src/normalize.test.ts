@@ -1,6 +1,6 @@
 import { createFsFromVolume, Volume } from "memfs";
 import confyglot from "./";
-import { Options, SomePromiseBasedFs } from "./confyglot";
+import { Options, SomePromiseBasedFs } from "./";
 import { strict as assert } from "assert";
 
 describe("confyglot.normalize", () => {
@@ -134,6 +134,7 @@ someArray = ["null", "null", "not null", "null", "NULL", "null"]
     const options: Options = {
       fs: fs as SomePromiseBasedFs,
       transformNullStringToNull: true,
+      forbidMixedArrays: false,
     };
     const result = await confyglot.load("/toml", options);
     expect(result).toStrictEqual({
@@ -170,6 +171,7 @@ notnum[] = 01234
     const options: Options = {
       fs: fs as SomePromiseBasedFs,
       normalize: true,
+      forbidMixedArrays: false,
     };
     const result = await confyglot.load("/ini", options);
     expect(result).toStrictEqual({
@@ -205,5 +207,47 @@ notnum[] = 01234
         "-0.23e7": "notnum",
       },
     });
+  });
+
+  it("forbids mixed arrays", async () => {
+    const fs = createFsFromVolume(
+      Volume.fromJSON({
+        "/toml/.project.toml": `array = [1, 1.2, "string"]`,
+        "/json/.project.json": `{"a": {"b": [{"a": 1}, {"b": 1}, 2]}}`,
+        "/yaml/.project.yaml": `array:
+  - [1, 2, 3]
+  - ["ok", "ok", "ok"]
+  - string
+`,
+        "/ini/.project.ini": `array[]=1
+array[]=1.2
+array[]=string
+`,
+      })
+    ).promises;
+
+    const options: Options = {
+      fs: fs as SomePromiseBasedFs,
+      forbidMixedArrays: true,
+    };
+    await expect(confyglot.load("/toml", options)).rejects.toThrow(
+      `error with configuration '/toml/.project.toml': Inline lists must be a single type, not a mix of integer and float at row 1, col 17, pos 16`
+    );
+    await expect(confyglot.load("/json", options)).rejects.toThrow(
+      `error with configuration '/json/.project.json': normalization failed: with forbidMixedArrays=true, arrays must be of a single type, not a mix of integer and object: value of 'a.b' is approximately [{"a":1},{"b":1},2]`
+    );
+    await expect(confyglot.load("/ini", options)).rejects.toThrow(
+      `error with configuration '/ini/.project.ini': normalization failed: with forbidMixedArrays=true, arrays must be of a single type, not a mix of float and integer`
+    );
+    await expect(confyglot.load("/yaml", options)).rejects.toThrow(
+      `error with configuration '/yaml/.project.yaml': normalization failed: with forbidMixedArrays=true, arrays must be of a single type, not a mix of string and array`
+    );
+    options.forbidMixedArrays = false;
+    await expect(confyglot.load("/toml", options)).rejects.toThrow(
+      `error with configuration '/toml/.project.toml': Inline lists must be a single type, not a mix of integer and float at row 1, col 17, pos 16`
+    );
+    await expect(confyglot.load("/json", options)).resolves.toBeDefined();
+    await expect(confyglot.load("/ini", options)).resolves.toBeDefined();
+    await expect(confyglot.load("/yaml", options)).resolves.toBeDefined();
   });
 });

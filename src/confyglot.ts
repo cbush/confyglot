@@ -1,10 +1,10 @@
+import { strict as assert } from "assert";
 import * as Path from "path";
-import { BaseEncodingOptions, promises as defaultPromiseBasedFs } from "fs";
 import TOML from "@iarna/toml";
 import ini from "ini";
 import yaml from "js-yaml";
-import { strict as assert } from "assert";
 import Ajv, { JSONSchemaType, AnySchema } from "ajv";
+import { Options, defaultOptions } from "./Options";
 import { normalize } from "./normalize";
 
 const getAjv = (() => {
@@ -47,39 +47,12 @@ const parsers: {
   ".yml": parseYaml,
 };
 
-// Everything confyglot needs from the fs
-export interface SomePromiseBasedFs {
-  readdir(
-    path: string,
-    options?:
-      | (BaseEncodingOptions & { withFileTypes?: false })
-      | BufferEncoding
-      | null
-  ): Promise<string[]>;
-  readFile(path: string, encoding: "utf8"): Promise<string>;
-}
-
-export interface Options {
-  fs?: SomePromiseBasedFs;
-  root?: string;
-  transformNullStringToNull?: boolean;
-  normalize?: boolean;
-
-  // TOML does not allow mixed-type arrays. Set to true to enforce this behavior
-  // across all configuration formats.
-  forbidMixedArrays?: boolean;
-}
-
-const defaultOptions: Options = {
-  fs: defaultPromiseBasedFs,
-  normalize: true,
-  forbidMixedArrays: true,
-};
-
 const findConfig = async (
   directoryPath: string,
-  fs: SomePromiseBasedFs
+  options: Options
 ): Promise<string | undefined> => {
+  const { fs } = options;
+  assert(fs !== undefined);
   const list = await fs.readdir(directoryPath);
   const configs = list
     .filter((file) => {
@@ -128,7 +101,7 @@ export const load = async <ConfigOut = SomeObject>(
     await Promise.all(
       segments.map((segment) => {
         path = Path.join(path, segment);
-        return findConfig(path, fs);
+        return findConfig(path, c);
       })
     )
   ).filter((pathOrUndefined) => pathOrUndefined !== undefined) as string[];

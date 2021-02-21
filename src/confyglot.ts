@@ -4,33 +4,57 @@ import TOML from "@iarna/toml";
 import ini from "ini";
 import yaml from "js-yaml";
 import { strict as assert } from "assert";
+import Ajv, { JSONSchemaType, AnySchema } from "ajv";
+
+const getAjv = (() => {
+  let ajv: Ajv | undefined = undefined;
+  return (): Ajv => {
+    if (ajv === undefined) {
+      ajv = new Ajv();
+    }
+    return ajv;
+  };
+})();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SomeObject = Record<string, any>;
 
 type ParseFunction = (text: string) => SomeObject;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const transform = (
+  value: any,
+  shouldTransform: (value: any) => boolean,
+  doTransform: (value: any) => any
+): any => {
+  if (Array.isArray(value)) {
+    return value.map((v) => transform(v, shouldTransform, doTransform));
+  }
+  if (shouldTransform(value)) {
+    value = doTransform(value);
+  }
+  if (typeof value !== "object") {
+    return value;
+  }
+  Object.entries(value).forEach(([k, v]) => {
+    value[k] = transform(v, shouldTransform, doTransform);
+  });
+  return value;
+};
+
+const isoStringifyDates = (object: SomeObject) =>
+  transform(
+    object,
+    (v) => v instanceof Date,
+    (v: Date) => v.toISOString()
+  );
+
 const parseYaml: ParseFunction = (text) => {
   const result = yaml.load(text);
   if (typeof result !== "object") {
     throw new Error(`yaml file does not contain an object`);
   }
-  return result as Record<string, unknown>;
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const restoreProto = (value: any): any => {
-  if (typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, value]) => {
-      if (Array.isArray(value)) {
-        return [key, value.map(restoreProto)];
-      }
-      return [key, restoreProto(value)];
-    })
-  );
+  return isoStringifyDates(result as Record<string, unknown>);
 };
 
 const parsers: {
@@ -39,10 +63,18 @@ const parsers: {
   ".ini"(text) {
     // The ini library doesn't bother copying __proto__ which does make for
     // unexpected behavior in unit tests
-    return restoreProto(ini.parse(text));
+    return transform(
+      ini.parse(text),
+      (v) => typeof v === "object",
+      (v) => ({ ...v })
+    );
   },
   ".json": JSON.parse,
-  ".toml": TOML.parse,
+  ".toml"(text) {
+    // TOML does support first-class dates, which is great, but inconsistent
+    // with the other formats.
+    return isoStringifyDates(TOML.parse(text));
+  },
   ".yaml": parseYaml,
   ".yml": parseYaml,
 };
@@ -95,7 +127,10 @@ const findConfig = async (
 */
 export const load = async <ConfigOut = SomeObject>(
   directoryPath: string,
-  configIn?: ConfigIn & { defaults?: ConfigOut }
+  configIn?: ConfigIn & {
+    defaults?: ConfigOut;
+    schema?: AnySchema | JSONSchemaType<ConfigOut>;
+  }
 ): Promise<ConfigOut> => {
   const c = { ...defaultConfigIn, ...(configIn ?? {}) };
   const { fs } = c;
@@ -122,6 +157,9 @@ export const load = async <ConfigOut = SomeObject>(
     )
   ).filter((pathOrUndefined) => pathOrUndefined !== undefined) as string[];
 
+  const validate =
+    c.schema !== undefined ? getAjv().compile(c.schema) : undefined;
+
   const configurations = await Promise.all(
     configPaths.map(async (configPath) => {
       try {
@@ -129,10 +167,21 @@ export const load = async <ConfigOut = SomeObject>(
         const extension = Path.extname(configPath).toLowerCase();
         const parse = parsers[extension];
         if (parse === undefined) {
-          // This should be impossible
-          throw new Error(`Parser for extension '${extension}' undefined!`);
+          // This should never happen
+          throw new Error(
+            `Parser for extension '${extension}' undefined! This should never happen. Please file a bug: https://github.com/cbush/confyglot/issues/new`
+          );
         }
-        return parse(text);
+        const result = parse(text);
+        if (validate !== undefined && !validate(result)) {
+          throw new Error(
+            getAjv().errorsText(validate.errors, {
+              separator: "\n",
+              dataVar: "",
+            })
+          );
+        }
+        return result;
       } catch (error) {
         error.message = `error with configuration '${configPath}': ${error.message}`;
         throw error;

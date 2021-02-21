@@ -2,6 +2,7 @@ import { createFsFromVolume, Volume } from "memfs";
 import confyglot from "./";
 import { SomePromiseBasedFs } from "./confyglot";
 import * as Path from "path";
+import { JSONSchemaType } from "ajv";
 
 describe("confyglot", () => {
   const volume = Volume.fromJSON(
@@ -37,7 +38,7 @@ hobbies = [ "baseball", "cooking", "history" ]
       title: "Fan file",
       favoriteCaptain: {
         name: "Sisko",
-        dob: new Date("2332-10-21T20:30:00.000Z"),
+        dob: "2332-10-21T20:30:00.000Z",
         hobbies: ["baseball", "cooking", "history"],
       },
       favoriteEpisode: "House of Quark",
@@ -132,7 +133,7 @@ specialDelivery:  >
         family_name: "Gale",
         first_name: "Dorothy",
       },
-      date: new Date("2012-08-06T00:00:00.000Z"),
+      date: "2012-08-06T00:00:00.000Z",
       items: [
         {
           descrip: "Water Bucket (Filled)",
@@ -259,7 +260,7 @@ hobbies = [ "baseball", "cooking", "history" ]
       title: "Fan file",
       favoriteCaptain: {
         name: "Sisko",
-        dob: new Date("2332-10-21T14:30:00-06:00"),
+        dob: "2332-10-21T20:30:00.000Z", // converted to ISO string
         hobbies: ["baseball", "cooking", "history"],
       },
     };
@@ -337,6 +338,84 @@ hobbies = [ "baseball", "cooking", "history" ]
       })
     ).rejects.toThrow(
       "ENOENT: no such file or directory, readdir '/path/to/nowhere'"
+    );
+  });
+
+  it("supports schema validation", async () => {
+    await expect(
+      confyglot.load("path/to/my/project", {
+        fs: fs as SomePromiseBasedFs,
+        schema: {
+          type: "object",
+          required: ["title", "favoriteCaptain"],
+          properties: {
+            title: {
+              type: "string",
+            },
+            captain: {
+              type: "object",
+            },
+          },
+        },
+      })
+    ).resolves.toBeDefined();
+
+    type FanFile = {
+      favoriteCaptain: {
+        name: string;
+        dob: string;
+        hobbies: string[];
+      };
+    };
+    const schema: JSONSchemaType<FanFile> = {
+      type: "object",
+      required: ["favoriteCaptain"],
+      properties: {
+        favoriteCaptain: {
+          type: "object",
+          required: ["name", "dob", "hobbies"],
+          properties: {
+            name: {
+              type: "string",
+            },
+            dob: {
+              type: "string",
+            },
+            hobbies: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    };
+    await expect(
+      confyglot.load<FanFile>("path/to/my/project", {
+        fs: fs as SomePromiseBasedFs,
+        schema,
+      })
+    ).resolves.toMatchObject({
+      favoriteCaptain: {
+        dob: "2332-10-21T20:30:00.000Z",
+      },
+    });
+
+    await expect(
+      confyglot.load("path/to/my/project", {
+        fs: fs as SomePromiseBasedFs,
+        schema: {
+          type: "object",
+          required: ["something I forgot"],
+          properties: {
+            "something I forgot": {
+              type: "string",
+            },
+          },
+        },
+      })
+    ).rejects.toThrow(
+      new RegExp(
+        `^error with configuration '${Path.resolve(
+          "path/to/my/.project.json"
+        )}':  should have required property 'something I forgot'`
+      )
     );
   });
 });

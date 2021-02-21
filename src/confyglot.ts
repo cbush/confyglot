@@ -5,6 +5,7 @@ import ini from "ini";
 import yaml from "js-yaml";
 import { strict as assert } from "assert";
 import Ajv, { JSONSchemaType, AnySchema } from "ajv";
+import { normalize } from "./normalize";
 
 const getAjv = (() => {
   let ajv: Ajv | undefined = undefined;
@@ -16,69 +17,34 @@ const getAjv = (() => {
   };
 })();
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SomeObject = Record<string, any>;
+export type Format = "toml" | "yaml" | "ini" | "json";
 
-type ParseFunction = (text: string) => SomeObject;
-type ParseWithOptionsFunction = (text: string, options: Options) => SomeObject;
+export type SomeObject = Record<string, unknown>;
 
-// Different formats have various support for dates, bool, number, etc.
-// Normalize them all here.
-const normalize = (object: SomeObject, options: Options): SomeObject => {
-  if (!options.normalize) {
-    return object;
-  }
-  return JSON.parse(JSON.stringify(object));
-};
+type ParseFunction = (text: string, options: Options) => SomeObject;
 
-const normalized = (parse: ParseFunction): ParseWithOptionsFunction => {
-  return (text, options): SomeObject => normalize(parse(text), options);
-};
-
-const parseYaml: ParseFunction = (text) => {
+const parseYaml: ParseFunction = (text, options) => {
   const result = yaml.load(text);
   if (typeof result !== "object") {
     throw new Error(`yaml file does not contain an object`);
   }
-  return result as Record<string, unknown>;
+  return normalize("yaml", result as Record<string, unknown>, options);
 };
 
 const parsers: {
-  [extension: string]: ParseWithOptionsFunction;
+  [extension: string]: ParseFunction;
 } = {
   ".ini"(text, options) {
-    const parsed = ini.parse(text);
-    if (!options.normalize) {
-      return parsed;
-    }
-    let json = JSON.stringify(parsed);
-    // Replace json number-like strings with their numeric equivalents
-    // unless they are used in a key.
-    // See https://www.json.org/ for supported number types.
-    json = json.replace(
-      /([:[,]?)"(-?(?:[1-9]\d*|0)(?:\.\d+)?(?:[Ee][+-]?\d+)?)"([^:])/g,
-      "$1$2$3"
-    );
-    return JSON.parse(json);
+    return normalize("ini", ini.parse(text), options);
   },
-  ".json"(text) {
-    return JSON.parse(text);
+  ".json"(text, options) {
+    return normalize("json", JSON.parse(text), options);
   },
   ".toml"(text, options) {
-    const parsed = TOML.parse(text);
-    if (!options.normalize) {
-      return parsed;
-    }
-    let json = JSON.stringify(parsed);
-    if (options.transformNullStringToNull) {
-      // Find "null" as object value or array element, but not as object key,
-      // and replace with `null`.
-      json = json.replace(/([:[,]?)"null"([^:])/g, "$1null$2");
-    }
-    return JSON.parse(json);
+    return normalize("toml", TOML.parse(text), options);
   },
-  ".yaml": normalized(parseYaml),
-  ".yml": normalized(parseYaml),
+  ".yaml": parseYaml,
+  ".yml": parseYaml,
 };
 
 // Everything confyglot needs from the fs
@@ -98,11 +64,16 @@ export interface Options {
   root?: string;
   transformNullStringToNull?: boolean;
   normalize?: boolean;
+
+  // TOML does not allow mixed-type arrays. Set to true to enforce this behavior
+  // across all configuration formats.
+  forbidMixedArrays?: boolean;
 }
 
 const defaultOptions: Options = {
   fs: defaultPromiseBasedFs,
   normalize: true,
+  forbidMixedArrays: true,
 };
 
 const findConfig = async (

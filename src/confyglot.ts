@@ -20,63 +20,65 @@ const getAjv = (() => {
 type SomeObject = Record<string, any>;
 
 type ParseFunction = (text: string) => SomeObject;
+type ParseWithOptionsFunction = (text: string, options: Options) => SomeObject;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const transform = (
-  value: any,
-  shouldTransform: (value: any) => boolean,
-  doTransform: (value: any) => any
-): any => {
-  if (Array.isArray(value)) {
-    return value.map((v) => transform(v, shouldTransform, doTransform));
+// Different formats have various support for dates, bool, number, etc.
+// Normalize them all here.
+const normalize = (object: SomeObject, options: Options): SomeObject => {
+  if (!options.normalize) {
+    return object;
   }
-  if (shouldTransform(value)) {
-    value = doTransform(value);
-  }
-  if (typeof value !== "object") {
-    return value;
-  }
-  Object.entries(value).forEach(([k, v]) => {
-    value[k] = transform(v, shouldTransform, doTransform);
-  });
-  return value;
+  return JSON.parse(JSON.stringify(object));
 };
 
-const isoStringifyDates = (object: SomeObject) =>
-  transform(
-    object,
-    (v) => v instanceof Date,
-    (v: Date) => v.toISOString()
-  );
+const normalized = (parse: ParseFunction): ParseWithOptionsFunction => {
+  return (text, options): SomeObject => normalize(parse(text), options);
+};
 
 const parseYaml: ParseFunction = (text) => {
   const result = yaml.load(text);
   if (typeof result !== "object") {
     throw new Error(`yaml file does not contain an object`);
   }
-  return isoStringifyDates(result as Record<string, unknown>);
+  return result as Record<string, unknown>;
 };
 
 const parsers: {
-  [extension: string]: ParseFunction;
+  [extension: string]: ParseWithOptionsFunction;
 } = {
-  ".ini"(text) {
-    // The ini library doesn't bother copying __proto__ which does make for
-    // unexpected behavior in unit tests
-    return transform(
-      ini.parse(text),
-      (v) => typeof v === "object",
-      (v) => ({ ...v })
+  ".ini"(text, options) {
+    const parsed = ini.parse(text);
+    if (!options.normalize) {
+      return parsed;
+    }
+    let json = JSON.stringify(parsed);
+    // Replace json number-like strings with their numeric equivalents
+    // unless they are used in a key.
+    // See https://www.json.org/ for supported number types.
+    json = json.replace(
+      /([:[,]?)"(-?(?:[1-9]\d*|0)(?:\.\d+)?(?:[Ee][+-]?\d+)?)"([^:])/g,
+      "$1$2$3"
     );
+    return JSON.parse(json);
   },
-  ".json": JSON.parse,
-  ".toml"(text) {
-    // TOML does support first-class dates, which is great, but inconsistent
-    // with the other formats.
-    return isoStringifyDates(TOML.parse(text));
+  ".json"(text) {
+    return JSON.parse(text);
   },
-  ".yaml": parseYaml,
-  ".yml": parseYaml,
+  ".toml"(text, options) {
+    const parsed = TOML.parse(text);
+    if (!options.normalize) {
+      return parsed;
+    }
+    let json = JSON.stringify(parsed);
+    if (options.transformNullStringToNull) {
+      // Find "null" as object value or array element, but not as object key,
+      // and replace with `null`.
+      json = json.replace(/([:[,]?)"null"([^:])/g, "$1null$2");
+    }
+    return JSON.parse(json);
+  },
+  ".yaml": normalized(parseYaml),
+  ".yml": normalized(parseYaml),
 };
 
 // Everything confyglot needs from the fs
@@ -91,13 +93,16 @@ export interface SomePromiseBasedFs {
   readFile(path: string, encoding: "utf8"): Promise<string>;
 }
 
-export interface ConfigIn {
+export interface Options {
   fs?: SomePromiseBasedFs;
   root?: string;
+  transformNullStringToNull?: boolean;
+  normalize?: boolean;
 }
 
-const defaultConfigIn: ConfigIn = {
+const defaultOptions: Options = {
   fs: defaultPromiseBasedFs,
+  normalize: true,
 };
 
 const findConfig = async (
@@ -127,12 +132,12 @@ const findConfig = async (
 */
 export const load = async <ConfigOut = SomeObject>(
   directoryPath: string,
-  configIn?: ConfigIn & {
+  options?: Options & {
     defaults?: ConfigOut;
     schema?: AnySchema | JSONSchemaType<ConfigOut>;
   }
 ): Promise<ConfigOut> => {
-  const c = { ...defaultConfigIn, ...(configIn ?? {}) };
+  const c = { ...defaultOptions, ...(options ?? {}) };
   const { fs } = c;
   assert(fs !== undefined);
 
@@ -172,7 +177,7 @@ export const load = async <ConfigOut = SomeObject>(
             `Parser for extension '${extension}' undefined! This should never happen. Please file a bug: https://github.com/cbush/confyglot/issues/new`
           );
         }
-        const result = parse(text);
+        const result = parse(text, c);
         if (validate !== undefined && !validate(result)) {
           throw new Error(
             getAjv().errorsText(validate.errors, {

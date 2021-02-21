@@ -18,10 +18,29 @@ const parseYaml: ParseFunction = (text) => {
   return result as Record<string, unknown>;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const restoreProto = (value: any): any => {
+  if (typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, value]) => {
+      if (Array.isArray(value)) {
+        return [key, value.map(restoreProto)];
+      }
+      return [key, restoreProto(value)];
+    })
+  );
+};
+
 const parsers: {
   [extension: string]: ParseFunction;
 } = {
-  ".ini": ini.parse,
+  ".ini"(text) {
+    // The ini library doesn't bother copying __proto__ which does make for
+    // unexpected behavior in unit tests
+    return restoreProto(ini.parse(text));
+  },
   ".json": JSON.parse,
   ".toml": TOML.parse,
   ".yaml": parseYaml,
@@ -49,19 +68,31 @@ const defaultConfigIn: ConfigIn = {
   fs: defaultPromiseBasedFs,
 };
 
-const findConfigs = async (
+const findConfig = async (
   directoryPath: string,
   fs: SomePromiseBasedFs
-): Promise<string[]> => {
+): Promise<string | undefined> => {
   const list = await fs.readdir(directoryPath);
   const configs = list
     .filter((file) => {
       return /^\.project\.(js|json|ya?ml|toml|ini)$/i.test(file);
     })
     .map((file) => Path.join(directoryPath, file));
-  return configs;
+  if (configs.length > 1) {
+    throw new Error(
+      `multiple possible configurations found in '${directoryPath}': ${configs.join(
+        ", "
+      )}`
+    );
+  }
+  return configs[0];
 };
 
+/**
+  Loads any configuration files within the given directory path.
+
+  @param directoryPath - The starting path to find configurations in.
+*/
 export const load = async <ConfigOut = SomeObject>(
   directoryPath: string,
   configIn?: ConfigIn & { defaults?: ConfigOut }
@@ -84,10 +115,10 @@ export const load = async <ConfigOut = SomeObject>(
     await Promise.all(
       segments.map((segment) => {
         path = Path.join(path, segment);
-        return findConfigs(path, fs);
+        return findConfig(path, fs);
       })
     )
-  ).flat();
+  ).filter((pathOrUndefined) => pathOrUndefined !== undefined) as string[];
 
   const configurations = await Promise.all(
     configPaths.map(async (configPath) => {

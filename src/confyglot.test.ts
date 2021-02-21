@@ -281,6 +281,7 @@ hobbies = [ "baseball", "cooking", "history" ]
         "/toml/.project.toml": `[invalid toml`,
         "/json/.project.json": `{invalid json`,
         "/yaml/.project.yaml": `[invalid yaml`,
+        "/yaml2/.project.yaml": `not an object`,
         // Nothing I do with ini seems to be invalid
       })
     ).promises;
@@ -288,20 +289,32 @@ hobbies = [ "baseball", "cooking", "history" ]
       confyglot.load("/toml", {
         fs: fs as SomePromiseBasedFs,
       })
-    ).rejects.toThrow(/^Unexpected character, expected whitespace, . or ]/);
+    ).rejects.toThrow(
+      /^error with configuration '\/toml\/.project.toml': Unexpected character, expected whitespace, . or ]/
+    );
 
     await expect(
       confyglot.load("/json", {
         fs: fs as SomePromiseBasedFs,
       })
-    ).rejects.toThrow("Unexpected token i in JSON at position 1");
+    ).rejects.toThrow(
+      /^error with configuration '\/json\/.project.json': Unexpected token i in JSON at position 1/
+    );
 
     await expect(
       confyglot.load("/yaml", {
         fs: fs as SomePromiseBasedFs,
       })
     ).rejects.toThrow(
-      /^unexpected end of the stream within a flow collection \(2:1\)/
+      /^error with configuration '\/yaml\/.project.yaml': unexpected end of the stream within a flow collection \(2:1\)/
+    );
+
+    await expect(
+      confyglot.load("/yaml2", {
+        fs: fs as SomePromiseBasedFs,
+      })
+    ).rejects.toThrow(
+      /^error with configuration '\/yaml2\/.project.yaml': yaml file does not contain an object/
     );
   });
 

@@ -109,6 +109,8 @@ export const load = async <ConfigOut = SomeObject>(
     );
   }
 
+  // Build up the configuration from the root of the hierarchy. Allow later
+  // configurations to override earlier ones.
   const segments = relativeFromRoot.split(Path.sep);
   let path = Path.resolve(root);
   const configPaths = (
@@ -122,13 +124,19 @@ export const load = async <ConfigOut = SomeObject>(
 
   const configurations = await Promise.all(
     configPaths.map(async (configPath) => {
-      const text = await fs.readFile(configPath, "utf8");
-      const extension = Path.extname(configPath).toLowerCase();
-      const parse = parsers[extension];
-      if (parse === undefined) {
-        throw new Error(`Parser for extension '${extension}' undefined!`);
+      try {
+        const text = await fs.readFile(configPath, "utf8");
+        const extension = Path.extname(configPath).toLowerCase();
+        const parse = parsers[extension];
+        if (parse === undefined) {
+          // This should be impossible
+          throw new Error(`Parser for extension '${extension}' undefined!`);
+        }
+        return parse(text);
+      } catch (error) {
+        error.message = `error with configuration '${configPath}': ${error.message}`;
+        throw error;
       }
-      return parse(text);
     })
   );
 

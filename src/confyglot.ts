@@ -1,8 +1,11 @@
 import { ValidateFunction } from "ajv";
-import { findConfigs, LoadOptions } from "./load";
-import { Options, defaultOptions } from "./Options";
+import { findConfigs } from "./find";
+import { Options, LoadOptions, defaultOptions } from "./Options";
 import { parseConfigurations, getAjv } from "./parse";
 
+/**
+  Confyglot searches directory trees for configuration files in various formats.
+*/
 export class Confyglot<
   YourConfiguration extends Record<string, unknown> = Record<string, unknown>
 > {

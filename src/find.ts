@@ -1,11 +1,7 @@
-import { defaultOptions, Options } from "./Options";
+import { defaultOptions, LoadOptions } from "./Options";
 import { strict as assert } from "assert";
 import * as Path from "path";
 import { Confyglot } from "./confyglot";
-
-export interface LoadOptions {
-  root?: string;
-}
 
 export const findConfig = async (
   instance: Confyglot,

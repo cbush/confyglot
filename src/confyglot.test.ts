@@ -1,5 +1,5 @@
 import { createFsFromVolume, Volume } from "memfs";
-import confyglot from "./";
+import confyglot, { Confyglot } from "./";
 import { SomePromiseBasedFs } from "./";
 import * as Path from "path";
 import { JSONSchemaType } from "ajv";
@@ -474,5 +474,23 @@ hobbies = [ "baseball", "cooking", "history" ]
         defaults,
       })
     ).toStrictEqual(defaults);
+  });
+
+  it("can be instantiated", async () => {
+    const fs = createFsFromVolume(
+      Volume.fromJSON({
+        "/path/to/project/.project.json": `{
+  "a": 1,
+  "b": 2
+}`,
+      })
+    ).promises;
+
+    const instance = new Confyglot({ fs: fs as SomePromiseBasedFs });
+
+    expect(await instance.load("/path/to/project")).toStrictEqual({
+      a: 1,
+      b: 2,
+    });
   });
 });

@@ -1,9 +1,10 @@
+import { AnySchema, JSONSchemaType } from "ajv";
 import { BaseEncodingOptions, promises as defaultPromiseBasedFs } from "fs";
 
-export interface Options {
+export interface Options<
+  T extends Record<string, unknown> = Record<string, unknown>
+> {
   fs?: SomePromiseBasedFs;
-
-  root?: string;
 
   configPrefix?: string;
 
@@ -13,6 +14,10 @@ export interface Options {
   // TOML does not allow mixed-type arrays. Set to true to enforce this behavior
   // across all configuration formats.
   forbidMixedArrays?: boolean;
+
+  schema?: AnySchema | JSONSchemaType<T>;
+
+  defaults?: T;
 }
 
 // Everything confyglot needs from the fs

@@ -3,7 +3,7 @@ import * as Path from "path";
 import TOML from "@iarna/toml";
 import ini from "ini";
 import yaml from "js-yaml";
-import Ajv, { JSONSchemaType, AnySchema } from "ajv";
+import Ajv, { JSONSchemaType, AnySchema, ValidateFunction } from "ajv";
 import { Options, defaultOptions } from "./Options";
 import { normalize } from "./normalize";
 
@@ -16,6 +16,10 @@ const getAjv = (() => {
     return ajv;
   };
 })();
+
+export interface LoadOptions {
+  root?: string;
+}
 
 export type Format = "toml" | "yaml" | "ini" | "json";
 
@@ -77,85 +81,104 @@ const findConfig = async (
   return configs[0];
 };
 
-/**
-  Loads any configuration files within the given directory path.
-
-  @param directoryPath - The starting path to find configurations in.
-*/
-export const load = async <ConfigOut = SomeObject>(
-  directoryPath: string,
-  options?: Options & {
-    defaults?: ConfigOut;
-    schema?: AnySchema | JSONSchemaType<ConfigOut>;
-  }
-): Promise<ConfigOut | undefined> => {
-  const c = { ...defaultOptions, ...(options ?? {}) };
-  const { fs } = c;
-  assert(fs !== undefined);
-
-  const root = Path.resolve(Path.join(c.root ?? Path.sep, Path.sep));
-  const relativeFromRoot = Path.relative(root, directoryPath);
-  if (/^\.\./.test(relativeFromRoot)) {
-    throw new Error(
-      `root '${root}' is not related to given directory ${directoryPath}`
-    );
-  }
-
-  // Build up the configuration from the root of the hierarchy. Allow later
-  // configurations to override earlier ones.
-  const segments = relativeFromRoot.split(Path.sep);
-  let path = Path.resolve(root);
-  const configPaths = (
-    await Promise.all(
-      segments.map((segment) => {
-        path = Path.join(path, segment);
-        return findConfig(path, c);
-      })
-    )
-  ).filter((pathOrUndefined) => pathOrUndefined !== undefined) as string[];
-
-  const validate =
-    c.schema !== undefined ? getAjv().compile(c.schema) : undefined;
-
-  const configurations = await Promise.all(
-    configPaths.map(async (configPath) => {
-      try {
-        const text = await fs.readFile(configPath, "utf8");
-        const extension = Path.extname(configPath).toLowerCase();
-        const parse = parsers[extension];
-        if (parse === undefined) {
-          // This should never happen
-          throw new Error(
-            `Parser for extension '${extension}' undefined! This should never happen. Please file a bug: https://github.com/cbush/confyglot/issues/new`
-          );
-        }
-        const result = parse(text, c);
-        if (validate !== undefined && !validate(result)) {
-          throw new Error(
-            getAjv().errorsText(validate.errors, {
-              separator: "\n",
-              dataVar: "",
-            })
-          );
-        }
-        return result;
-      } catch (error) {
-        error.message = `error with configuration '${configPath}': ${error.message}`;
-        throw error;
-      }
-    })
-  );
-
-  if (configurations.length === 0) {
-    return c.defaults;
-  }
-
-  const configuration = configurations.reduce((acc, cur) => {
-    return {
-      ...acc,
-      ...cur,
+export class Confyglot<
+  YourConfiguration extends Record<string, unknown> = Record<string, unknown>
+> {
+  constructor(options?: Options<YourConfiguration>) {
+    this._options = {
+      ...(defaultOptions as Options<YourConfiguration>),
+      ...(options ?? {}),
     };
-  }, c.defaults ?? {});
 
-  return configuration as ConfigOut;
+    const { schema } = this._options;
+    if (schema !== undefined) {
+      this._validate = getAjv().compile(schema);
+    }
+  }
+
+  load = async (
+    directoryPath: string,
+    options?: LoadOptions
+  ): Promise<YourConfiguration | undefined> => {
+    const c = this._options;
+    const { fs } = c;
+    assert(fs !== undefined);
+
+    const root = Path.resolve(Path.join(options?.root ?? Path.sep, Path.sep));
+    const relativeFromRoot = Path.relative(root, directoryPath);
+    if (/^\.\./.test(relativeFromRoot)) {
+      throw new Error(
+        `root '${root}' is not related to given directory ${directoryPath}`
+      );
+    }
+
+    // Build up the configuration from the root of the hierarchy. Allow later
+    // configurations to override earlier ones.
+    const segments = relativeFromRoot.split(Path.sep);
+    let path = Path.resolve(root);
+    const configPaths = (
+      await Promise.all(
+        segments.map((segment) => {
+          path = Path.join(path, segment);
+          return findConfig(path, c);
+        })
+      )
+    ).filter((pathOrUndefined) => pathOrUndefined !== undefined) as string[];
+
+    const validate =
+      c.schema !== undefined ? getAjv().compile(c.schema) : undefined;
+
+    const configurations = await Promise.all(
+      configPaths.map(async (configPath) => {
+        try {
+          const text = await fs.readFile(configPath, "utf8");
+          const extension = Path.extname(configPath).toLowerCase();
+          const parse = parsers[extension];
+          if (parse === undefined) {
+            // This should never happen
+            throw new Error(
+              `Parser for extension '${extension}' undefined! This should never happen. Please file a bug: https://github.com/cbush/confyglot/issues/new`
+            );
+          }
+          const result = parse(text, c);
+          if (validate !== undefined && !validate(result)) {
+            throw new Error(
+              getAjv().errorsText(validate.errors, {
+                separator: "\n",
+                dataVar: "",
+              })
+            );
+          }
+          return result;
+        } catch (error) {
+          error.message = `error with configuration '${configPath}': ${error.message}`;
+          throw error;
+        }
+      })
+    );
+
+    if (configurations.length === 0) {
+      return c.defaults;
+    }
+
+    const configuration = configurations.reduce((acc, cur) => {
+      return {
+        ...acc,
+        ...cur,
+      };
+    }, c.defaults ?? {});
+
+    return configuration as YourConfiguration;
+  };
+
+  _options: Options<YourConfiguration>;
+  _validate?: ValidateFunction<YourConfiguration>;
+}
+
+export const load = <ConfigOut extends Record<string, unknown> = SomeObject>(
+  directoryPath: string,
+  options?: Options<ConfigOut> & LoadOptions
+): Promise<ConfigOut | undefined> => {
+  const instance = new Confyglot<ConfigOut>(options);
+  return instance.load(directoryPath, { root: options?.root });
 };

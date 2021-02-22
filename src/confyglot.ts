@@ -21,6 +21,13 @@ export class Confyglot<
     }
   }
 
+  /**
+    Loads the configuration(s) at directoryPath and above to options.root.
+
+    Root is at the top of the tree and directoryPath is presumably somewhere
+    below that. Configurations lower on the tree override properties of
+    configurations higher in the tree. In other words, configurations cascade.
+  */
   load = async (
     directoryPath: string,
     options?: LoadOptions
@@ -50,6 +57,10 @@ export class Confyglot<
   _validate?: ValidateFunction<YourConfiguration>;
 }
 
+/**
+  Convenient instanceless wrapper around [[Confyglot.load]]. For repeated usage
+  with the same options, prefer to create a [[Confyglot]] instance.
+ */
 export const load = <
   ConfigOut extends Record<string, unknown> = Record<string, unknown>
 >(

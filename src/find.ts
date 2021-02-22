@@ -38,7 +38,9 @@ export const findConfigs = async (
   directoryPath: string,
   options?: LoadOptions
 ): Promise<string[]> => {
-  const root = Path.resolve(Path.join(options?.root ?? Path.sep, Path.sep));
+  const root = Path.resolve(
+    Path.join(options?.root ?? directoryPath, Path.sep)
+  );
   const relativeFromRoot = Path.relative(root, directoryPath);
   if (/^\.\./.test(relativeFromRoot)) {
     throw new Error(

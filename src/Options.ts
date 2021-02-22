@@ -72,8 +72,9 @@ export const defaultOptions: Options = {
  */
 export interface LoadOptions {
   /**
-    Specifies the root path beyond which Confyglot will not search for
-    configuration files.
+    Specifies the root path above which Confyglot will not search for
+    configuration files. If unspecified, [[Confyglot.load]] only searches the
+    one directory given to it.
    */
   root?: string;
 }

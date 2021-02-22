@@ -33,6 +33,7 @@ hobbies = [ "baseball", "cooking", "history" ]
   it("cascades results", async () => {
     const result = await confyglot.load("path/to/my/project/src", {
       fs: fs as SomePromiseBasedFs,
+      root: Path.sep,
     });
 
     expect(result).toStrictEqual({
@@ -405,6 +406,7 @@ hobbies = [ "baseball", "cooking", "history" ]
     await expect(
       confyglot.load("path/to/my/project", {
         fs: fs as SomePromiseBasedFs,
+        root: Path.sep,
         schema: {
           type: "object",
           required: ["something I forgot"],

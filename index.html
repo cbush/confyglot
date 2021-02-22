@@ -59,11 +59,85 @@
 		<div class="col-8 col-content">
 			<div class="tsd-panel tsd-typography">
 				<a href="#confyglot" id="confyglot" style="color: inherit; text-decoration: none;">
-					<h1>confyglot</h1>
+					<h1>Confyglot</h1>
 				</a>
+				<p>Loads your app&#39;s configuration files in json, toml, yaml, ini, etc.</p>
+				<p>⚔️ What&#39;s the best format for configuration? Who cares! Stop wading into endless
+				arguments. Let your users decide!</p>
+				<p>Inspired most recently by
+					<a href="https://www.npmjs.com/package/release-it">release-it</a>&#39;s support for various
+				configuration formats.</p>
 				<ul>
-					<li><a href="https://cbush.github.io/confyglot/">API Documentation</a></li>
+					<li>📖 <a href="https://cbush.github.io/confyglot/">API Documentation</a></li>
+					<li>🗣️ <a href="https://github.com/cbush/confyglot/issues/new">Open an issue</a></li>
 				</ul>
+				<a href="#usage" id="usage" style="color: inherit; text-decoration: none;">
+					<h2>Usage</h2>
+				</a>
+				<pre><code class="language-sh"><span style="color: #000000">npm install confyglot</span>
+</code></pre>
+				<pre><code class="language-js"><span style="color: #0000FF">const</span><span style="color: #000000"> </span><span style="color: #0070C1">confyglot</span><span style="color: #000000"> = </span><span style="color: #795E26">require</span><span style="color: #000000">(</span><span style="color: #A31515">&quot;confyglot&quot;</span><span style="color: #000000">)</span>
+
+<span style="color: #001080">confyglot</span><span style="color: #000000">.</span><span style="color: #795E26">load</span><span style="color: #000000">(</span><span style="color: #A31515">&quot;path/to/myProject/someDirectory/&quot;</span><span style="color: #000000">, {</span>
+<span style="color: #000000">  </span><span style="color: #001080">root:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;path/to/myProject/&quot;</span><span style="color: #000000">, </span><span style="color: #008000">// Build up a cascading configuration up to a project root</span>
+<span style="color: #000000">  </span><span style="color: #001080">configPrefix:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;.myConfig&quot;</span><span style="color: #000000">,  </span><span style="color: #008000">// Look for .myConfig.json, .myConfig.yaml, .myConfig.yml, etc.</span>
+<span style="color: #000000">  </span><span style="color: #001080">defaults:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">    </span><span style="color: #001080">bestFileInDirectory:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;info.txt&quot;</span><span style="color: #000000">, </span><span style="color: #008000">// Default values to be overridden</span>
+<span style="color: #000000">  },</span>
+<span style="color: #000000">}).</span><span style="color: #795E26">then</span><span style="color: #000000">((</span><span style="color: #001080">config</span><span style="color: #000000">) </span><span style="color: #0000FF">=&gt;</span><span style="color: #000000"> {</span>
+<span style="color: #000000">  </span><span style="color: #001080">console</span><span style="color: #000000">.</span><span style="color: #795E26">log</span><span style="color: #000000">(</span><span style="color: #A31515">&quot;Loaded configuration:&quot;</span><span style="color: #000000">, </span><span style="color: #001080">config</span><span style="color: #000000">);</span>
+<span style="color: #000000">}).</span><span style="color: #795E26">catch</span><span style="color: #000000">((</span><span style="color: #001080">error</span><span style="color: #000000">) </span><span style="color: #0000FF">=&gt;</span><span style="color: #000000"> {</span>
+<span style="color: #000000">  </span><span style="color: #001080">console</span><span style="color: #000000">.</span><span style="color: #795E26">error</span><span style="color: #000000">(</span><span style="color: #A31515">&quot;Failed with error:&quot;</span><span style="color: #000000">, </span><span style="color: #001080">error</span><span style="color: #000000">)</span>
+<span style="color: #000000">});</span>
+</code></pre>
+				<a href="#feature-overview" id="feature-overview" style="color: inherit; text-decoration: none;">
+					<h2>Feature Overview</h2>
+				</a>
+				<a href="#normalization" id="normalization" style="color: inherit; text-decoration: none;">
+					<h3>Normalization</h3>
+				</a>
+				<p>Various formats have various support for data types like date, numbers(!), and
+					null. By default, Confyglot tries to normalize the output configuration so that
+					you can work with the same JS object shape regardless of which configuration
+				format was used.</p>
+				<blockquote>
+					<p>💡 You can even
+						<a href="https://cbush.github.io/confyglot/interfaces/options.html#forbidmixedarrays">force</a>
+					any configuration format to have homogenous arrays like TOML does.</p>
+				</blockquote>
+				<a href="#cascading-configurations-across-directories" id="cascading-configurations-across-directories" style="color: inherit; text-decoration: none;">
+					<h3>Cascading Configurations Across Directories</h3>
+				</a>
+				<p>Subdirectories might want to override some of the properties of a parent
+					directory&#39;s configuration. Let&#39;s call this &quot;cascading&quot;. Confyglot can cascade
+					files at each level in a directory tree up to a certain project root. You can
+				also provide a default configuration that other configurations can override.</p>
+				<a href="#schema-validation" id="schema-validation" style="color: inherit; text-decoration: none;">
+					<h3>Schema Validation</h3>
+				</a>
+				<p>You can have Confyglot check every loaded configuration against a <a href="https://json-schema.org/">JSON
+				Schema</a> you provide.</p>
+				<a href="#typescript" id="typescript" style="color: inherit; text-decoration: none;">
+					<h3>TypeScript</h3>
+				</a>
+				<p>The Confyglot class is generic, so you can specify the type of your
+					configuration that you expect to load. This is most useful when combined with
+				JSON schema validation.</p>
+				<a href="#caveats" id="caveats" style="color: inherit; text-decoration: none;">
+					<h2>Caveats</h2>
+				</a>
+				<a href="#general" id="general" style="color: inherit; text-decoration: none;">
+					<h3>General</h3>
+				</a>
+				<p>Confyglot is currently in pre-1.0 development. Its API may change. Also, it is
+					currently very aggressive with throwing exceptions on malformed user
+				configurations. After more usage we&#39;ll see if we might want to tone this down.</p>
+				<a href="#yaml" id="yaml" style="color: inherit; text-decoration: none;">
+					<h3>YAML</h3>
+				</a>
+				<p>⚠️ For some reason, yaml might turn these property names lowercase: &quot;False&quot;,
+					&quot;True&quot;, and &quot;Null&quot;. Not sure in what other cases this might happen, but I would
+				avoid using keywords as field names in your configuration schema for now.</p>
 			</div>
 		</div>
 		<div class="col-4 col-menu menu-sticky-wrap menu-highlight">

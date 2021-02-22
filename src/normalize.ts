@@ -1,4 +1,4 @@
-import { Format, SomeObject } from "./confyglot";
+import { Format } from "./parse";
 import { Options } from "./Options";
 import { strict as assert } from "assert";
 
@@ -131,7 +131,7 @@ const transform = (
     return applyTransformers(value);
   }
   return Object.fromEntries(
-    Object.entries(value as SomeObject).map(([key, value]) => {
+    Object.entries(value as Record<string, unknown>).map(([key, value]) => {
       const newBreadcrumbs = [...breadcrumbs, key];
       const transformedValue = transform(value, transformers, newBreadcrumbs);
       return [key, transformedValue];
@@ -143,9 +143,9 @@ const transform = (
 // Normalize them all here.
 export const normalize = (
   format: Format,
-  parsedObject: SomeObject,
+  parsedObject: Record<string, unknown>,
   options: Options
-): SomeObject => {
+): Record<string, unknown> => {
   try {
     if (!options.normalize) {
       return parsedObject;
@@ -157,7 +157,10 @@ export const normalize = (
 
     const transformers = getTransformersForFormat(format, options);
     if (transformers.length > 0) {
-      parsedObject = transform(parsedObject, transformers, []) as SomeObject;
+      parsedObject = transform(parsedObject, transformers, []) as Record<
+        string,
+        unknown
+      >;
     }
     return parsedObject;
   } catch (error) {

@@ -46,7 +46,7 @@ myNull = null
       })
     ).promises;
 
-    const options: Options = {
+    const options: Partial<Options> = {
       fs: fs as SomePromiseBasedFs,
       transformNullStringToNull: true,
     };
@@ -60,7 +60,6 @@ myNull = null
     expect(firstResult).toBeDefined();
     assert(firstResult !== undefined);
     results.forEach(([path, result]) => {
-      console.log(`Compare ${path}`);
       expect(result).toStrictEqual(firstResult[1]);
     });
   });
@@ -90,7 +89,7 @@ somekey=c
       })
     ).promises;
 
-    const options: Options = {
+    const options: Partial<Options> = {
       fs: fs as SomePromiseBasedFs,
       transformNullStringToNull: true,
     };
@@ -133,7 +132,7 @@ someArray = ["null", "null", "not null", "null", "NULL", "null"]
       })
     ).promises;
 
-    const options: Options = {
+    const options: Partial<Options> = {
       fs: fs as SomePromiseBasedFs,
       transformNullStringToNull: true,
       forbidMixedArrays: false,
@@ -170,7 +169,7 @@ notnum[] = 01234
       })
     ).promises;
 
-    const options: Options = {
+    const options: Partial<Options> = {
       fs: fs as SomePromiseBasedFs,
       normalize: true,
       forbidMixedArrays: false,
@@ -228,7 +227,7 @@ array[]=string
       })
     ).promises;
 
-    const options: Options = {
+    const options: Partial<Options> = {
       fs: fs as SomePromiseBasedFs,
       forbidMixedArrays: true,
     };

@@ -103,12 +103,14 @@ somekey=c
     const firstResult = results.shift();
     expect(firstResult).toBeDefined();
     assert(firstResult !== undefined);
+    assert(firstResult[1] !== undefined);
     expect(Object.keys(firstResult[1])).toStrictEqual([
       "someKey",
       "SOMEKEY",
       "somekey",
     ]);
     results.forEach(([path, result]) => {
+      assert(result !== undefined);
       expect(Object.keys(result)).toStrictEqual([
         "someKey",
         "SOMEKEY",

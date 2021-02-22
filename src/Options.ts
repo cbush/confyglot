@@ -2,7 +2,11 @@ import { BaseEncodingOptions, promises as defaultPromiseBasedFs } from "fs";
 
 export interface Options {
   fs?: SomePromiseBasedFs;
+
   root?: string;
+
+  configPrefix?: string;
+
   transformNullStringToNull?: boolean;
   normalize?: boolean;
 
@@ -27,4 +31,5 @@ export const defaultOptions: Options = {
   fs: defaultPromiseBasedFs,
   normalize: true,
   forbidMixedArrays: true,
+  configPrefix: ".project",
 };

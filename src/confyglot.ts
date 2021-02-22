@@ -51,12 +51,20 @@ const findConfig = async (
   directoryPath: string,
   options: Options
 ): Promise<string | undefined> => {
-  const { fs } = options;
+  const { fs, configPrefix } = options;
   assert(fs !== undefined);
+  assert(configPrefix !== undefined);
+
+  const reConfigPrefix = (configPrefix ?? defaultOptions.configPrefix).replace(
+    ".",
+    "\\."
+  );
+
+  const re = new RegExp(`^${reConfigPrefix}\\.(js|json|ya?ml|toml|ini)$`, "i");
   const list = await fs.readdir(directoryPath);
   const configs = list
     .filter((file) => {
-      return /^\.project\.(js|json|ya?ml|toml|ini)$/i.test(file);
+      return re.test(file);
     })
     .map((file) => Path.join(directoryPath, file));
   if (configs.length > 1) {
@@ -80,7 +88,7 @@ export const load = async <ConfigOut = SomeObject>(
     defaults?: ConfigOut;
     schema?: AnySchema | JSONSchemaType<ConfigOut>;
   }
-): Promise<ConfigOut> => {
+): Promise<ConfigOut | undefined> => {
   const c = { ...defaultOptions, ...(options ?? {}) };
   const { fs } = c;
   assert(fs !== undefined);
@@ -137,6 +145,10 @@ export const load = async <ConfigOut = SomeObject>(
       }
     })
   );
+
+  if (configurations.length === 0) {
+    return c.defaults;
+  }
 
   const configuration = configurations.reduce((acc, cur) => {
     return {

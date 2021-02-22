@@ -3,6 +3,7 @@ import confyglot from "./";
 import { SomePromiseBasedFs } from "./";
 import * as Path from "path";
 import { JSONSchemaType } from "ajv";
+import { strict as assert } from "assert";
 
 describe("confyglot", () => {
   const volume = Volume.fromJSON(
@@ -50,13 +51,14 @@ hobbies = [ "baseball", "cooking", "history" ]
       fs: fs as SomePromiseBasedFs,
       root: Path.resolve("path/to/my/"),
     });
-
+    assert(result1 !== undefined);
     expect(result1["favoriteEpisode"]).toBeUndefined();
 
     const result2 = await confyglot.load("path/to/my/project/src", {
       fs: fs as SomePromiseBasedFs,
       root: Path.resolve("path/to/my"), // Trailing slash should not matter
     });
+    assert(result2 !== undefined);
     expect(result2["favoriteEpisode"]).toBeUndefined();
   });
 
@@ -420,5 +422,57 @@ hobbies = [ "baseball", "cooking", "history" ]
         )}':  should have required property 'something I forgot'`
       )
     );
+  });
+
+  it("accepts prefix", async () => {
+    const exampleJson = `{}`;
+    const fs = createFsFromVolume(
+      Volume.fromJSON({
+        "/path/to/project/myCoolApp.json": exampleJson,
+        "/path/to/project/.myCoolApp.json": exampleJson,
+        "/path/to/project/notmyCoolApp.json": exampleJson,
+      })
+    ).promises;
+    const notFoundWithDefault = await confyglot.load("/path/to/project", {
+      fs: fs as SomePromiseBasedFs,
+    });
+    expect(notFoundWithDefault).toBeUndefined();
+
+    expect(
+      await confyglot.load("/path/to/project", {
+        fs: fs as SomePromiseBasedFs,
+        configPrefix: "myCoolApp",
+      })
+    ).toBeDefined();
+    expect(
+      await confyglot.load("/path/to/project", {
+        fs: fs as SomePromiseBasedFs,
+        configPrefix: ".myCoolApp",
+      })
+    ).toBeDefined();
+  });
+
+  it("returns default or undefined if no configuration found", async () => {
+    const fs = createFsFromVolume(
+      Volume.fromJSON({
+        "/path/to/project/file.txt": "",
+      })
+    ).promises;
+    expect(
+      await confyglot.load("/path/to/project", {
+        fs: fs as SomePromiseBasedFs,
+      })
+    ).toBeUndefined();
+
+    const defaults = {
+      a: 1,
+      b: 2,
+    };
+    expect(
+      await confyglot.load("/path/to/project", {
+        fs: fs as SomePromiseBasedFs,
+        defaults,
+      })
+    ).toStrictEqual(defaults);
   });
 });
